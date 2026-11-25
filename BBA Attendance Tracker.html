@@ -1,0 +1,625 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>BBA Attendance Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: summary and verdict on top, then a two-column workspace (log + calendar | planner, library hours, medical steps). One column on phones. */
+:root {
+  --bg: #F2F4F8;
+  --surface: #FFFFFF;
+  --ink: #121C33;
+  --muted: #566178;
+  --line: #DDE2EC;
+  --line-strong: #BCC5D6;
+  --accent: #1D3F9E;
+  --on-accent: #FFFFFF;
+  --accent-tint: #DCE5FA;
+  --good: #17744A;
+  --good-bg: #DDF3E7;
+  --warn: #9A5B00;
+  --warn-bg: #FBEBCB;
+  --crit: #B3261E;
+  --crit-bg: #FBDDD9;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D1322; --surface: #141B2E; --ink: #E6EBF6; --muted: #95A1BA; --line: #25304D; --line-strong: #3A4768;
+    --accent: #8FB0FF; --on-accent: #0D1322; --accent-tint: #1F2D52;
+    --good: #5CCB93; --good-bg: #14352A; --warn: #F0B04E; --warn-bg: #3A2C10; --crit: #FF8A7D; --crit-bg: #40201D;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D1322; --surface: #141B2E; --ink: #E6EBF6; --muted: #95A1BA; --line: #25304D; --line-strong: #3A4768;
+  --accent: #8FB0FF; --on-accent: #0D1322; --accent-tint: #1F2D52;
+  --good: #5CCB93; --good-bg: #14352A; --warn: #F0B04E; --warn-bg: #3A2C10; --crit: #FF8A7D; --crit-bg: #40201D;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 14px/1.5 var(--sans);
+  padding-block: 20px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 26px; line-height: 1.2; font-weight: 600; text-wrap: balance; }
+h2 { font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 16px; }
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.state { font-size: 12px; color: var(--muted); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; min-width: 0; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.stack { display: grid; gap: 16px; min-width: 0; }
+@media (max-width: 820px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* Summary */
+.hero { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.big { font: 600 52px/1 var(--mono); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.hero-sub { color: var(--muted); }
+.pill { display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 999px; }
+.pill.ok { background: var(--good-bg); color: var(--good); }
+.pill.tight { background: var(--warn-bg); color: var(--warn); }
+.pill.short { background: var(--crit-bg); color: var(--crit); }
+.bar { position: relative; height: 14px; border-radius: 4px; background: var(--line); margin: 20px 0 30px; }
+.bar .ghost { position: absolute; inset: 0 auto 0 0; background: repeating-linear-gradient(45deg, var(--accent-tint) 0 4px, transparent 4px 8px); border-radius: 4px; border: 1px solid var(--accent-tint); }
+.bar .fill { position: absolute; inset: 0 auto 0 0; background: var(--accent); border-radius: 4px; }
+.bar .tick { position: absolute; top: -6px; bottom: -6px; width: 2px; background: var(--ink); }
+.bar .tick span { position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 2px; font: 500 12px var(--mono); white-space: nowrap; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+@media (max-width: 720px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stat { border-top: 2px solid var(--line-strong); padding-top: 8px; min-width: 0; }
+.stat .k { font-size: 12px; color: var(--muted); }
+.stat .v { font: 600 24px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.stat .s { font-size: 12px; color: var(--muted); }
+.verdict { display: flex; gap: 10px; align-items: flex-start; }
+.verdict p { min-width: 0; }
+
+/* Controls */
+.btn { font: 500 14px var(--sans); color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 12px; min-height: 40px; cursor: pointer; }
+.btn:hover { background: var(--accent-tint); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.lbl { font-size: 12px; color: var(--muted); display: block; margin-bottom: 6px; }
+input[type="date"], input[type="number"] { font: 500 14px var(--mono); color: var(--ink); background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; padding: 8px 10px; min-height: 40px; max-width: 100%; }
+input[type="number"] { width: 90px; }
+.nums { display: flex; gap: 8px; flex-wrap: wrap; }
+.nums button { min-width: 48px; height: 46px; font: 600 17px var(--mono); border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.nums button:hover:not(:disabled) { background: var(--accent-tint); }
+.nums button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.nums button:disabled { opacity: 0.4; cursor: not-allowed; }
+.log-grid { display: grid; gap: 14px; margin-top: 12px; }
+.msg { color: var(--muted); font-size: 13px; }
+.notice { margin-top: 12px; padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.stepper { display: inline-flex; align-items: center; gap: 8px; }
+.stepper output { font: 600 17px var(--mono); min-width: 24px; text-align: center; }
+.check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
+.check input { margin-top: 3px; width: 18px; height: 18px; flex: none; accent-color: var(--accent); }
+.check label { min-width: 0; }
+
+/* Calendar */
+.months { display: grid; grid-template-columns: repeat(auto-fit, minmax(236px, 1fr)); gap: 18px; margin-top: 14px; }
+.month h3 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.wd { font-size: 11px; color: var(--muted); text-align: center; }
+.cell { aspect-ratio: 1; min-height: 32px; border-radius: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; font: 500 12px/1.1 var(--mono); padding: 0; }
+.cell .v { font-size: 10px; color: inherit; opacity: 0.85; }
+button.cell { cursor: pointer; }
+button.cell:hover { border-color: var(--accent); }
+.cell.off { background: repeating-linear-gradient(45deg, var(--line) 0 1px, transparent 1px 6px); color: var(--muted); border-color: transparent; }
+.cell.out { border-color: transparent; background: transparent; color: var(--muted); opacity: 0.4; }
+.cell.exam { background: var(--accent-tint); color: var(--accent); border-color: transparent; }
+.cell.full { background: var(--good-bg); color: var(--good); border-color: transparent; }
+.cell.part { background: var(--warn-bg); color: var(--warn); border-color: transparent; }
+.cell.none { background: var(--crit-bg); color: var(--crit); border-color: transparent; }
+.cell.nc { background: var(--line); color: var(--muted); border-color: transparent; }
+.cell.gap { border: 1px dashed var(--warn); }
+.cell.today { box-shadow: inset 0 -3px 0 var(--ink); }
+.cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 14px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; border: 1px solid var(--line); }
+.legend .lf { background: var(--good-bg); } .legend .lp { background: var(--warn-bg); } .legend .ln { background: var(--crit-bg); }
+.legend .lg { border: 1px dashed var(--warn); } .legend .lo { background: repeating-linear-gradient(45deg, var(--line-strong) 0 1px, transparent 1px 4px); }
+
+/* Planner */
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.plan-out { display: grid; gap: 6px; margin-top: 10px; }
+.plan-out .line { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding: 5px 0; }
+.plan-out .line b { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; }
+details summary { cursor: pointer; font-weight: 600; font-size: 15px; }
+.set-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin-top: 12px; }
+.foot { font-size: 12px; color: var(--muted); max-width: 70ch; }
+@media (prefers-reduced-motion: no-preference) { .bar .fill, .bar .ghost { transition: width 0.3s ease; } }
+</style>
+
+<main class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Christ University · VI semester · classes end 5 Mar 2027</p>
+      <h1>BBA Attendance Tracker</h1>
+    </div>
+    <p class="state" id="saveState" role="status">Loading…</p>
+  </header>
+
+  <section class="card" aria-labelledby="sumH">
+    <h2 id="sumH" class="lbl" style="margin-bottom:10px">Where you stand</h2>
+    <div class="hero">
+      <div class="big" id="pctNow">–</div>
+      <div class="hero-sub" id="pctSub"></div>
+    </div>
+    <div class="bar" role="img" id="barImg">
+      <div class="ghost" id="ghost"></div>
+      <div class="fill" id="fill"></div>
+      <div class="tick" id="tick"><span id="tickLbl"></span></div>
+    </div>
+    <div class="stats">
+      <div class="stat"><div class="k">Classes left</div><div class="v" id="stLeft"></div><div class="s" id="stLeftS"></div></div>
+      <div class="stat"><div class="k">Must attend</div><div class="v" id="stMust"></div><div class="s" id="stMustS"></div></div>
+      <div class="stat"><div class="k">Can still miss</div><div class="v" id="stMiss"></div><div class="s" id="stMissS"></div></div>
+      <div class="stat"><div class="k">Best possible finish</div><div class="v" id="stBest"></div><div class="s">if you attend every class left</div></div>
+    </div>
+    <div class="verdict">
+      <span class="pill" id="pill"></span>
+      <p id="verdict"></p>
+    </div>
+  </section>
+
+  <div class="cols">
+    <div class="stack">
+      <section class="card" aria-labelledby="logH">
+        <h2 id="logH">Log a day</h2>
+        <div class="log-grid">
+          <div class="row">
+            <div>
+              <label class="lbl" for="logDate">Date</label>
+              <input type="date" id="logDate" min="2026-11-26" max="2027-03-05">
+            </div>
+            <div>
+              <span class="lbl" id="heldLbl">Classes held that day</span>
+              <div class="stepper" role="group" aria-labelledby="heldLbl">
+                <button class="btn" id="heldDown" type="button" aria-label="One fewer class held">−</button>
+                <output id="heldVal">4</output>
+                <button class="btn" id="heldUp" type="button" aria-label="One more class held">+</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <span class="lbl" id="attLbl">How many did you attend? Tap a number to save.</span>
+            <div class="nums" id="nums" role="group" aria-labelledby="attLbl"></div>
+          </div>
+          <div class="check" style="padding:0">
+            <input type="checkbox" id="medDay">
+            <label for="medDay">Medical absence (I have a certificate or prescription for this day)</label>
+          </div>
+          <div class="row">
+            <p class="msg" id="logMsg"></p>
+            <button class="btn" id="clearDay" type="button">Clear this day</button>
+          </div>
+        </div>
+        <div class="notice" id="gapNotice" hidden></div>
+      </section>
+
+      <section class="card" aria-labelledby="calH">
+        <h2 id="calH">Calendar to 5 March</h2>
+        <p class="msg">Tap a day to log it. Hatched days have no classes.</p>
+        <div class="months" id="months"></div>
+        <div class="legend">
+          <span><i class="lf"></i>Attended all</span>
+          <span><i class="lp"></i>Attended some</span>
+          <span><i class="ln"></i>Missed all</span>
+          <span><i class="lg"></i>Not logged yet</span>
+          <span><i class="lo"></i>No classes</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="stack">
+      <section class="card" aria-labelledby="planH">
+        <h2 id="planH">Plan the rest of the semester</h2>
+        <label class="lbl" for="rate" style="margin-top:10px">Share of remaining classes I expect to attend: <b id="rateVal"></b></label>
+        <input type="range" id="rate" min="50" max="100" step="1">
+        <div class="plan-out" id="planOut"></div>
+      </section>
+
+      <section class="card" aria-labelledby="libH">
+        <h2 id="libH">Library hours</h2>
+        <p class="msg" style="margin:6px 0 10px">Policy: 2 library hours make up for 1 missed class hour. Log the hours you have actually done.</p>
+        <div class="row">
+          <button class="btn" id="libDown" type="button">−1 h</button>
+          <button class="btn" id="libUp1" type="button">+1 h</button>
+          <button class="btn" id="libUp2" type="button">+2 h</button>
+        </div>
+        <p id="libOut" style="margin-top:10px"></p>
+      </section>
+
+      <section class="card" aria-labelledby="medH">
+        <h2 id="medH">Medical case steps</h2>
+        <div id="checks" style="margin-top:6px"></div>
+        <p class="msg" id="medCount" style="margin-top:8px"></p>
+      </section>
+
+      <section class="card">
+        <details>
+          <summary>Settings</summary>
+          <div class="set-grid">
+            <div><label class="lbl" for="sBaseA">Attended by 25 Nov</label><input type="number" id="sBaseA" min="0" max="999"></div>
+            <div><label class="lbl" for="sBaseH">Held by 25 Nov</label><input type="number" id="sBaseH" min="1" max="999"></div>
+            <div><label class="lbl" for="sPer">Classes per day</label><input type="number" id="sPer" min="1" max="8"></div>
+            <div><label class="lbl" for="sTarget">Target %</label><input type="number" id="sTarget" min="50" max="100"></div>
+          </div>
+          <div class="check" style="margin-top:10px">
+            <input type="checkbox" id="sExam">
+            <label for="sExam">No classes during mid-semester exams, 4–9 Jan</label>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+
+  <p class="foot">Teaching days follow the 2026-27 academic calendar: Monday to Saturday, minus listed holidays (27 and 28 Nov, 14 Jan, 26 Jan), Christmas vacation from 23 Dec to 3 Jan and the mid-semester exam week. If a day has fewer or no classes, change "Classes held" when you log it. Your coordinator has the final say on attendance rules and condonation.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var KEY = 'bba-attendance-v1';
+  var START = '2026-11-26', END = '2027-03-05';
+  var HOL = { '2026-11-27': 'Kanakadasa Jayanthi', '2026-11-28': 'Compensatory holiday', '2027-01-14': 'Makara Sankranti', '2027-01-26': 'Republic Day' };
+  var VAC = ['2026-12-23', '2027-01-03'], EXAM = ['2027-01-04', '2027-01-09'];
+  var CHECKS = [
+    'Get a medical certificate and prescriptions that cover the dates you missed',
+    'Hand them to your class coordinator or HOD this week',
+    'Ask about condonation or medical-leave rules, the deadline and the form',
+    'Ask how many library hours can be waived with documents'
+  ];
+  var DEF = { baseA: 22, baseH: 85, perDay: 4, target: 75, skipExam: true, lib: 0, rate: 80, checks: [false, false, false, false], log: {} };
+
+  function $(id) { return document.getElementById(id); }
+  function set(id, t) { $(id).textContent = t; }
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function parse(s) { var p = s.split('-').map(Number); return new Date(p[0], p[1] - 1, p[2], 12); }
+  function label(s) { return parse(s).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }); }
+  function int(v, lo, hi, d) { v = Math.round(Number(v)); return isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d; }
+  function pct(a, h) { return h > 0 ? a / h * 100 : 0; }
+
+  var ALL = [];
+  (function () { var d = parse(START), e = parse(END); while (d <= e) { ALL.push(ymd(d)); d.setDate(d.getDate() + 1); } })();
+
+  var S = JSON.parse(JSON.stringify(DEF));
+
+  function sanitize(raw) {
+    var s = JSON.parse(JSON.stringify(DEF));
+    if (!raw || typeof raw !== 'object') return s;
+    s.baseH = int(raw.baseH, 1, 999, DEF.baseH);
+    s.baseA = int(raw.baseA, 0, s.baseH, DEF.baseA);
+    s.perDay = int(raw.perDay, 1, 8, 4);
+    s.target = int(raw.target, 50, 100, 75);
+    s.skipExam = raw.skipExam !== false;
+    s.lib = int(raw.lib, 0, 999, 0);
+    s.rate = int(raw.rate, 50, 100, 80);
+    if (Array.isArray(raw.checks)) s.checks = CHECKS.map(function (_, i) { return raw.checks[i] === true; });
+    if (raw.log && typeof raw.log === 'object') {
+      Object.keys(raw.log).forEach(function (k) {
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || k < START || k > END) return;
+        var e = raw.log[k] || {};
+        var h = int(e.h, 0, 8, s.perDay);
+        s.log[k] = { a: int(e.a, 0, h, 0), h: h, m: e.m === true };
+      });
+    }
+    return s;
+  }
+
+  function dayInfo(d) {
+    if (d < START || d > END) return { type: 'out', label: '' };
+    var dow = parse(d).getDay();
+    if (dow === 0) return { type: 'off', label: 'Sunday' };
+    if (HOL[d]) return { type: 'off', label: HOL[d] };
+    if (d >= VAC[0] && d <= VAC[1]) return { type: 'off', label: 'Christmas vacation' };
+    if (S.skipExam && d >= EXAM[0] && d <= EXAM[1]) return { type: 'exam', label: 'Mid-semester exams' };
+    return { type: 'class', label: '' };
+  }
+
+  function compute() {
+    var today = ymd(new Date());
+    var a = S.baseA, h = S.baseH, remDays = 0, gap = 0, med = 0;
+    ALL.forEach(function (d) {
+      if (dayInfo(d).type !== 'class') return;
+      var e = S.log[d];
+      if (e) { a += e.a; h += e.h; if (e.m && e.a < e.h) med++; }
+      else if (d >= today) remDays++;
+      else gap++;
+    });
+    var rem = remDays * S.perDay;
+    var credit = Math.floor(S.lib / 2);
+    var effA = a + credit;
+    var total = h + rem;
+    var need = Math.max(0, Math.ceil(S.target / 100 * total - 1e-9));
+    var needMore = Math.max(0, need - effA);
+    return { today: today, a: a, h: h, remDays: remDays, rem: rem, gap: gap, med: med, credit: credit, effA: effA, total: total, need: need, needMore: needMore };
+  }
+
+  /* ---------- selection / log panel state ---------- */
+  var sel = null, draftHeld = 4, medDraft = false;
+
+  function pickInitial() {
+    var today = ymd(new Date()), best = null, firstClass = null;
+    ALL.forEach(function (d) {
+      if (dayInfo(d).type !== 'class') return;
+      if (!firstClass) firstClass = d;
+      if (d <= today && !S.log[d]) best = d;
+    });
+    if (S.log[today] || dayInfo(today).type === 'class') { if (today >= START && today <= END && dayInfo(today).type === 'class') return today; }
+    return best || firstClass || START;
+  }
+  function resetDraft() {
+    var e = S.log[sel];
+    draftHeld = e ? e.h : S.perDay;
+    medDraft = e ? e.m : false;
+  }
+  function setSel(d) { sel = d; resetDraft(); render(); }
+
+  /* ---------- persistence ---------- */
+  var ref = null, loaded = false, dirty = false, saving = false, timer = null, useLocal = false;
+  function setStatus(t) { set('saveState', t); }
+  function persist() {
+    dirty = true;
+    if (useLocal) {
+      try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {}
+      dirty = false; setStatus('Saved on this device only'); return;
+    }
+    setStatus('Saving…');
+    clearTimeout(timer);
+    timer = setTimeout(flush, 600);
+  }
+  function flush() {
+    if (!ref) return;
+    if (!loaded || saving) { timer = setTimeout(flush, 800); return; }
+    saving = true; dirty = false;
+    var body = JSON.parse(JSON.stringify(S)); body.v = 1;
+    ref.set(body).then(function () {
+      saving = false; setStatus(dirty ? 'Saving…' : 'Saved');
+    }, function () {
+      saving = false; dirty = true; setStatus('Could not save. Your changes are on screen; tap anything to retry.');
+    });
+  }
+
+  /* ---------- rendering ---------- */
+  function render() {
+    var c = compute();
+    var cur = pct(c.effA, c.h);
+    var maxPct = pct(c.effA + c.rem, c.total);
+    set('pctNow', cur.toFixed(1) + '%');
+    set('pctSub', c.a + ' of ' + c.h + ' classes attended' + (c.credit ? ', plus ' + c.credit + ' from library hours' : ''));
+    $('fill').style.width = Math.min(100, cur) + '%';
+    $('ghost').style.width = Math.min(100, maxPct) + '%';
+    $('tick').style.left = S.target + '%';
+    set('tickLbl', S.target + '% target');
+    $('barImg').setAttribute('aria-label', 'Attendance ' + cur.toFixed(1) + ' percent, target ' + S.target + ' percent, best possible ' + maxPct.toFixed(0) + ' percent');
+
+    var canMiss = c.rem - c.needMore;
+    set('stLeft', String(c.rem));
+    set('stLeftS', c.remDays + ' teaching days to 5 Mar');
+    set('stMust', String(Math.min(c.needMore, c.rem)));
+    set('stMustS', c.rem ? 'of ' + c.rem + ' (' + Math.round(Math.min(c.needMore, c.rem) / c.rem * 100) + '%), about ' + (c.remDays ? (Math.min(c.needMore, c.rem) / c.remDays).toFixed(1) : '0') + ' a day' : 'no classes left');
+    set('stMiss', String(Math.max(0, canMiss)));
+    set('stMissS', canMiss >= 0 ? 'about ' + Math.floor(canMiss / S.perDay) + ' full days' : 'not enough classes left');
+    set('stBest', maxPct.toFixed(0) + '%');
+
+    var shortCls = Math.max(0, c.needMore - c.rem);
+    var pill = $('pill'), v;
+    if (c.rem === 0) {
+      if (cur >= S.target - 1e-9) { pill.className = 'pill ok'; pill.textContent = 'Target reached'; v = 'No classes left to count and you are at ' + cur.toFixed(1) + '%.'; }
+      else { pill.className = 'pill short'; pill.textContent = 'Below target'; v = 'No classes left to count. You are ' + c.needMore + ' classes short of ' + S.target + '%, which is ' + (2 * c.needMore) + ' library hours or a condonation request.'; }
+    } else if (c.needMore === 0) {
+      pill.className = 'pill ok'; pill.textContent = 'On track';
+      v = 'You already have enough attended classes to finish at ' + S.target + '% even if you miss everything left. Keep attending to stay safe.';
+    } else if (shortCls > 0) {
+      pill.className = 'pill short'; pill.textContent = 'Needs library hours';
+      v = 'Attending every remaining class gets you to ' + maxPct.toFixed(1) + '%. You would still be ' + shortCls + ' classes short, which is ' + (2 * shortCls) + ' library hours or a medical condonation.';
+    } else {
+      var rate = c.needMore / c.rem;
+      pill.className = 'pill ' + (rate <= 0.8 ? 'ok' : 'tight');
+      pill.textContent = rate <= 0.8 ? 'On track' : 'Tight';
+      v = 'Attend at least ' + c.needMore + ' of the next ' + c.rem + ' classes (' + Math.round(rate * 100) + '%). You can miss up to ' + canMiss + ' classes, about ' + Math.floor(canMiss / S.perDay) + ' full days, in the rest of the semester, medical days included.';
+    }
+    set('verdict', v);
+
+    renderLog(c);
+    renderCalendar(c);
+    renderPlan(c);
+    renderLib(c);
+    renderMisc(c);
+  }
+
+  function renderLog(c) {
+    var info = dayInfo(sel), e = S.log[sel];
+    var canLog = info.type === 'class' && sel <= c.today;
+    $('logDate').value = sel;
+    set('heldVal', String(draftHeld));
+    $('heldDown').disabled = !canLog || draftHeld <= 0;
+    $('heldUp').disabled = !canLog || draftHeld >= 8;
+    $('medDay').checked = medDraft;
+    $('medDay').disabled = !canLog;
+    $('clearDay').disabled = !e;
+    var box = $('nums'); box.textContent = '';
+    for (var i = 0; i <= draftHeld; i++) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.textContent = String(i);
+      b.setAttribute('aria-label', i + ' of ' + draftHeld + ' classes attended');
+      b.setAttribute('aria-pressed', e && e.a === i && e.h === draftHeld ? 'true' : 'false');
+      b.disabled = !canLog;
+      b.dataset.n = String(i);
+      box.appendChild(b);
+    }
+    var m;
+    if (info.type !== 'class') m = label(sel) + ': ' + (info.label || 'outside the semester') + '. No classes to log.';
+    else if (sel > c.today) m = label(sel) + ' has not happened yet. Log it after your classes.';
+    else if (e) m = e.h === 0 ? label(sel) + ': marked as no classes.' : label(sel) + ': saved ' + e.a + ' of ' + e.h + '.';
+    else m = label(sel) + ': not logged yet.';
+    set('logMsg', m);
+    var g = $('gapNotice');
+    if (c.gap > 0) { g.hidden = false; g.textContent = c.gap + (c.gap === 1 ? ' past teaching day is' : ' past teaching days are') + ' not logged yet. Those days are left out of the numbers until you log them.'; }
+    else g.hidden = true;
+  }
+
+  function renderCalendar(c) {
+    var wrap = $('months'); wrap.textContent = '';
+    [[2026, 10], [2026, 11], [2027, 0], [2027, 1], [2027, 2]].forEach(function (ym) {
+      var mon = document.createElement('div'); mon.className = 'month';
+      var h3 = document.createElement('h3');
+      h3.textContent = new Date(ym[0], ym[1], 1, 12).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      mon.appendChild(h3);
+      var g = document.createElement('div'); g.className = 'grid';
+      ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(function (w) { var x = document.createElement('div'); x.className = 'wd'; x.textContent = w; g.appendChild(x); });
+      var first = new Date(ym[0], ym[1], 1, 12), lead = (first.getDay() + 6) % 7;
+      for (var i = 0; i < lead; i++) g.appendChild(document.createElement('div'));
+      var dim = new Date(ym[0], ym[1] + 1, 0, 12).getDate();
+      for (var n = 1; n <= dim; n++) {
+        var d = ym[0] + '-' + pad(ym[1] + 1) + '-' + pad(n);
+        var info = dayInfo(d), e = S.log[d];
+        var cell = document.createElement(info.type === 'class' ? 'button' : 'div');
+        var cls = 'cell ' + (info.type === 'class' ? '' : info.type);
+        var title = label(d);
+        if (info.type === 'class') {
+          cell.type = 'button';
+          if (e) {
+            cls += e.h === 0 ? ' nc' : e.a === e.h ? ' full' : e.a === 0 ? ' none' : ' part';
+            title += ': attended ' + e.a + ' of ' + e.h;
+          } else if (d < c.today) { cls += ' gap'; title += ': not logged'; }
+          else title += ': class day';
+          if (d === sel) { cls += ' sel'; cell.setAttribute('aria-pressed', 'true'); } else cell.setAttribute('aria-pressed', 'false');
+          cell.dataset.d = d;
+        } else if (info.label) title += ': ' + info.label;
+        if (d === c.today) cls += ' today';
+        cell.className = cls.replace(/\s+/g, ' ').trim();
+        cell.title = title;
+        cell.setAttribute('aria-label', title);
+        var num = document.createElement('span'); num.textContent = String(n); cell.appendChild(num);
+        if (e && info.type === 'class') { var v = document.createElement('span'); v.className = 'v'; v.textContent = e.a + '/' + e.h; cell.appendChild(v); }
+        g.appendChild(cell);
+      }
+      mon.appendChild(g); wrap.appendChild(mon);
+    });
+  }
+
+  function renderPlan(c) {
+    $('rate').value = String(S.rate);
+    set('rateVal', S.rate + '%');
+    var x = Math.round(S.rate / 100 * c.rem);
+    var fin = c.effA + x;
+    var short = Math.max(0, c.need - fin);
+    var rows = [
+      ['Classes you would attend', x + ' of ' + c.rem],
+      ['Classes you would miss', String(c.rem - x) + (c.remDays ? ' (about ' + Math.round((c.rem - x) / S.perDay) + ' days)' : '')],
+      ['Where you finish', pct(fin, c.total).toFixed(1) + '%'],
+      ['Classes short of ' + S.target + '%', String(short)],
+      [short ? 'More library hours needed' : 'Library hours needed', short ? String(2 * short) : 'None']
+    ];
+    var out = $('planOut'); out.textContent = '';
+    rows.forEach(function (r) {
+      var l = document.createElement('div'); l.className = 'line';
+      var a = document.createElement('span'); a.textContent = r[0];
+      var b = document.createElement('b'); b.textContent = r[1];
+      l.appendChild(a); l.appendChild(b); out.appendChild(l);
+    });
+  }
+
+  function renderLib(c) {
+    $('libDown').disabled = S.lib <= 0;
+    set('libOut', S.lib + ' library hours logged = ' + c.credit + ' classes credited. Next credit at ' + (2 * (c.credit + 1)) + ' hours.');
+  }
+
+  function renderMisc(c) {
+    var box = $('checks');
+    if (!box.firstChild) {
+      CHECKS.forEach(function (t, i) {
+        var row = document.createElement('div'); row.className = 'check';
+        var cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'chk' + i; cb.dataset.i = String(i);
+        var lb = document.createElement('label'); lb.htmlFor = cb.id; lb.textContent = t;
+        row.appendChild(cb); row.appendChild(lb); box.appendChild(row);
+      });
+    }
+    CHECKS.forEach(function (_, i) { $('chk' + i).checked = !!S.checks[i]; });
+    set('medCount', c.med ? c.med + ' medical absence ' + (c.med === 1 ? 'day' : 'days') + ' logged since 26 Nov. Keep the paperwork for each.' : 'Mark medical absences when you log them so you can match them to your documents.');
+    $('sBaseA').value = S.baseA; $('sBaseH').value = S.baseH; $('sPer').value = S.perDay; $('sTarget').value = S.target; $('sExam').checked = S.skipExam;
+  }
+
+  /* ---------- events ---------- */
+  function change() { persist(); render(); }
+  $('nums').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b || b.disabled) return;
+    S.log[sel] = { a: int(b.dataset.n, 0, draftHeld, 0), h: draftHeld, m: medDraft };
+    change();
+  });
+  $('heldDown').addEventListener('click', function () { draftHeld = Math.max(0, draftHeld - 1); var e = S.log[sel]; if (e) { e.h = draftHeld; e.a = Math.min(e.a, draftHeld); persist(); } render(); });
+  $('heldUp').addEventListener('click', function () { draftHeld = Math.min(8, draftHeld + 1); var e = S.log[sel]; if (e) { e.h = draftHeld; persist(); } render(); });
+  $('medDay').addEventListener('change', function () { medDraft = this.checked; var e = S.log[sel]; if (e) { e.m = medDraft; persist(); } render(); });
+  $('clearDay').addEventListener('click', function () { delete S.log[sel]; draftHeld = S.perDay; medDraft = false; change(); });
+  $('logDate').addEventListener('change', function () { var v = this.value; if (v >= START && v <= END) setSel(v); });
+  $('months').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b && b.dataset.d) setSel(b.dataset.d); });
+  $('rate').addEventListener('input', function () { S.rate = int(this.value, 50, 100, 80); render(); });
+  $('rate').addEventListener('change', function () { persist(); });
+  $('libDown').addEventListener('click', function () { S.lib = Math.max(0, S.lib - 1); change(); });
+  $('libUp1').addEventListener('click', function () { S.lib = Math.min(999, S.lib + 1); change(); });
+  $('libUp2').addEventListener('click', function () { S.lib = Math.min(999, S.lib + 2); change(); });
+  $('checks').addEventListener('change', function (ev) { var i = ev.target.dataset.i; if (i === undefined) return; S.checks[Number(i)] = ev.target.checked; persist(); });
+  function settingsChange() {
+    S.baseH = int($('sBaseH').value, 1, 999, S.baseH);
+    S.baseA = int($('sBaseA').value, 0, S.baseH, S.baseA);
+    S.perDay = int($('sPer').value, 1, 8, S.perDay);
+    S.target = int($('sTarget').value, 50, 100, S.target);
+    S.skipExam = $('sExam').checked;
+    resetDraft(); change();
+  }
+  ['sBaseA', 'sBaseH', 'sPer', 'sTarget', 'sExam'].forEach(function (id) { $(id).addEventListener('change', settingsChange); });
+
+  /* ---------- start ---------- */
+  sel = pickInitial(); resetDraft(); render();
+
+  function useLocalStore() {
+    useLocal = true;
+    try { var raw = localStorage.getItem(KEY); if (raw) { S = sanitize(JSON.parse(raw)); } } catch (e) {}
+    sel = pickInitial(); resetDraft(); render();
+    setStatus('Saved on this device only');
+  }
+
+  (async function () {
+    var uid = null, db = null;
+    try {
+      var cl = window.claude;
+      if (cl && cl.use) {
+        db = await cl.use('db');
+        var us = await cl.use('user');
+        uid = us ? await us.id() : null;
+      }
+    } catch (e) { db = null; }
+    if (!db || !uid) { useLocalStore(); return; }
+    ref = db.doc('data/users/' + uid + '/tracker');
+    var t = setTimeout(function () { if (!loaded) setStatus("Can't reach your saved data yet. Changes stay on screen until it connects."); }, 10000);
+    ref.onSnapshot(function (snap) {
+      if (snap.exists && !dirty && !saving) {
+        S = sanitize(snap.data());
+        if (!sel || dayInfo(sel).type === 'out') sel = pickInitial();
+        resetDraft(); render();
+      }
+      if (!snap.metadata.fromCache) {
+        loaded = true; clearTimeout(t);
+        if (!dirty && !saving) setStatus('Synced to your account');
+      }
+    }, function () {
+      clearTimeout(t); ref = null; useLocalStore();
+    });
+  })();
+})();
+</script>
+
+</body></html>
